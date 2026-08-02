@@ -1,1 +1,5 @@
-"""Root package for the vulnerability detection project source code."""
+from source.vuln47_gnn_model import Vuln47GNN
+
+__all__ = [
+    "Vuln47GNN"
+]
