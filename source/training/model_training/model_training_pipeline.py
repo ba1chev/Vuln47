@@ -63,11 +63,3 @@ class ModelTrainingPipeline(TrainingPipeline[None, dict]):
             n_safe += int((y == 0).sum())
         ratio = n_safe / max(n_vuln, 1)
         return torch.tensor([1.0, ratio], dtype=torch.float)
-
-
-if __name__ == "__main__":
-    from source.preprocessing.data_preprocessing.data_representation.data_node_representation.code_node_representator import CodeNodeRepresentator
-
-    vocab = CodeNodeRepresentator.load_or_build_vocab()
-    result = ModelTrainingPipeline(vocab).run()
-    print(result)
