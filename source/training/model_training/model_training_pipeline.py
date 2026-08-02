@@ -1,7 +1,7 @@
 import os
 import torch
 
-from source.model import build_model
+from source.vuln47_gnn_model import build_model
 from source.training.training_pipeline import TrainingPipeline
 from source.training.model_training.model_trainer import ModelTrainer
 from source.training.model_training.batch_loading.graph_batch_loader import GraphBatchLoader
