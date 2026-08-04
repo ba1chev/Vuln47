@@ -4,13 +4,14 @@ import torch
 from source.vuln47_gnn_model import build_model
 from source.training.training_pipeline import TrainingPipeline
 from source.training.model_training.model_trainer import ModelTrainer
+from source.training.model_training.early_stopping.early_stopper import EarlyStopper
 from source.training.model_training.batch_loading.graph_batch_loader import GraphBatchLoader
 from source.training.model_training.model_evaluation.metrics_evaluator import MetricsEvaluator
-from source.training.model_training.early_stopping.early_stopper import EarlyStopper
 from source.training.model_training.training_config import (
     DEVICE, TRAIN_PATH, VALID_PATH, TEST_PATH, CHECKPOINT_PATH,
     LR, WEIGHT_DECAY, EPOCHS, BEST_METRIC, SEED,
-    LR_SCHEDULER_FACTOR, LR_SCHEDULER_PATIENCE, MIN_LR, EARLY_STOPPING_PATIENCE
+    LR_SCHEDULER_FACTOR, LR_SCHEDULER_PATIENCE, MIN_LR, EARLY_STOPPING_PATIENCE,
+    HIDDEN_DIM, TOKEN_EMB_DIM
 )
 
 
@@ -27,7 +28,9 @@ class ModelTrainingPipeline(TrainingPipeline[None, dict]):
         train_loader = self.train_batch_loader.load(TRAIN_PATH)
         valid_loader = self.eval_batch_loader.load(VALID_PATH)
 
-        model = build_model(self.vocab).to(self.device)
+        model = build_model(
+            self.vocab, hidden_dim=HIDDEN_DIM, token_emb_dim=TOKEN_EMB_DIM
+        ).to(self.device)
         class_weight = self._compute_class_weight(train_loader)
         optimizer = torch.optim.Adam(model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
@@ -60,14 +63,28 @@ class ModelTrainingPipeline(TrainingPipeline[None, dict]):
                       f"(no {BEST_METRIC} improvement in {EARLY_STOPPING_PATIENCE} epochs)")
                 break
 
-        os.makedirs(os.path.dirname(CHECKPOINT_PATH), exist_ok=True)
-        torch.save(best_state, CHECKPOINT_PATH)
-
         model.load_state_dict(best_state)
-        test_metrics = evaluator.evaluate(self.eval_batch_loader.load(TEST_PATH))
+        threshold = evaluator.best_threshold(valid_loader)
+        test_metrics = evaluator.evaluate(
+            self.eval_batch_loader.load(TEST_PATH), threshold=threshold
+        )
+        valid_at_threshold = evaluator.evaluate(valid_loader, threshold=threshold)
+
+        os.makedirs(os.path.dirname(CHECKPOINT_PATH), exist_ok=True)
+        torch.save({
+            "state_dict": best_state,
+            "threshold": threshold,
+            "config": {
+                "hidden_dim": HIDDEN_DIM,
+                "token_emb_dim": TOKEN_EMB_DIM,
+            },
+        }, CHECKPOINT_PATH)
+
         return {
             "best_epoch": best_epoch,
             "best_valid": best_metrics,
+            "threshold": threshold,
+            "valid_at_threshold": valid_at_threshold,
             "test": test_metrics,
             "checkpoint": CHECKPOINT_PATH
         }
