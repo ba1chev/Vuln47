@@ -25,6 +25,18 @@ BATCH_SIZE = 64
 # metric used to track the best checkpoint
 BEST_METRIC = "pr_auc"
 
+# model capacity
+HIDDEN_DIM = 192
+TOKEN_EMB_DIM = 32
+
+# loss: "weighted_ce" (class-weighted cross-entropy) or "focal"
+LOSS_TYPE = "focal"
+FOCAL_GAMMA = 2.0
+
+# decision-threshold calibration: after training, pick the threshold that maximizes
+# F1 on the valid split and store it in the checkpoint (used at eval time)
+DEFAULT_THRESHOLD = 0.5
+
 # learning-rate schedule: halve the LR when the tracked metric plateaus
 LR_SCHEDULER_FACTOR = 0.5
 LR_SCHEDULER_PATIENCE = 2
