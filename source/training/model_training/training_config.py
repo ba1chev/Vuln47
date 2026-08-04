@@ -1,8 +1,12 @@
 import os
 import torch
 
-# device: prefer Apple MPS, else CPU
-DEVICE = "mps" if torch.backends.mps.is_available() else "cpu"
+# device: prefer CUDA (e.g. Colab GPU), then Apple MPS, else CPU
+DEVICE = (
+    "cuda" if torch.cuda.is_available()
+    else "mps" if torch.backends.mps.is_available()
+    else "cpu"
+)
 
 # data splits produced by preprocessing
 DATA_DIR = os.path.join("data", "processed")
