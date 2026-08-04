@@ -6,9 +6,11 @@ from source.training.training_pipeline import TrainingPipeline
 from source.training.model_training.model_trainer import ModelTrainer
 from source.training.model_training.batch_loading.graph_batch_loader import GraphBatchLoader
 from source.training.model_training.model_evaluation.metrics_evaluator import MetricsEvaluator
+from source.training.model_training.early_stopping.early_stopper import EarlyStopper
 from source.training.model_training.training_config import (
     DEVICE, TRAIN_PATH, VALID_PATH, TEST_PATH, CHECKPOINT_PATH,
-    LR, WEIGHT_DECAY, EPOCHS, BEST_METRIC
+    LR, WEIGHT_DECAY, EPOCHS, BEST_METRIC, SEED,
+    LR_SCHEDULER_FACTOR, LR_SCHEDULER_PATIENCE, MIN_LR, EARLY_STOPPING_PATIENCE
 )
 
 
@@ -20,12 +22,19 @@ class ModelTrainingPipeline(TrainingPipeline[None, dict]):
         self.eval_batch_loader = GraphBatchLoader(shuffle=False)
 
     def run(self, input: None = None) -> dict:
+        torch.manual_seed(SEED)
+
         train_loader = self.train_batch_loader.load(TRAIN_PATH)
         valid_loader = self.eval_batch_loader.load(VALID_PATH)
 
         model = build_model(self.vocab).to(self.device)
         class_weight = self._compute_class_weight(train_loader)
         optimizer = torch.optim.Adam(model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, mode="max", factor=LR_SCHEDULER_FACTOR,
+            patience=LR_SCHEDULER_PATIENCE, min_lr=MIN_LR
+        )
+        early_stopper = EarlyStopper(patience=EARLY_STOPPING_PATIENCE, mode="max")
 
         trainer = ModelTrainer(model, optimizer, class_weight, self.device)
         evaluator = MetricsEvaluator(model, self.device)
@@ -36,12 +45,20 @@ class ModelTrainingPipeline(TrainingPipeline[None, dict]):
         for epoch in range(EPOCHS):
             loss = trainer.train(train_loader)
             metrics = evaluator.evaluate(valid_loader)
+            tracked = metrics[BEST_METRIC]
+            scheduler.step(tracked)
+            early_stopper.update(tracked)
             print(f"epoch {epoch}: loss={loss:.4f} "
-                  + " ".join(f"{k}={v:.4f}" for k, v in metrics.items()))
-            if metrics[BEST_METRIC] > best:
-                best = metrics[BEST_METRIC]
+                  + " ".join(f"{k}={v:.4f}" for k, v in metrics.items())
+                  + f" lr={optimizer.param_groups[0]['lr']:.2e}")
+            if tracked > best:
+                best = tracked
                 best_metrics, best_epoch = metrics, epoch
                 best_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
+            if early_stopper.should_stop():
+                print(f"early stopping at epoch {epoch} "
+                      f"(no {BEST_METRIC} improvement in {EARLY_STOPPING_PATIENCE} epochs)")
+                break
 
         os.makedirs(os.path.dirname(CHECKPOINT_PATH), exist_ok=True)
         torch.save(best_state, CHECKPOINT_PATH)
@@ -52,7 +69,7 @@ class ModelTrainingPipeline(TrainingPipeline[None, dict]):
             "best_epoch": best_epoch,
             "best_valid": best_metrics,
             "test": test_metrics,
-            "checkpoint": CHECKPOINT_PATH,
+            "checkpoint": CHECKPOINT_PATH
         }
 
     def _compute_class_weight(self, train_loader) -> torch.Tensor:
