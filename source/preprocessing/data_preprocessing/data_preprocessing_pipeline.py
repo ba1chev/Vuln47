@@ -1,9 +1,11 @@
+import os
 import torch
 from tqdm import tqdm
 from torch_geometric.data import Data
 
 from source.preprocessing.preprocessing_pipeline import PreprocessingPipeline
 from source.preprocessing.data_preprocessing.data_loading.data_loader import DataLoader
+from source.preprocessing.data_preprocessing.data_fetching.data_fetcher import DataFetcher
 from source.preprocessing.data_preprocessing.data_representation.data_node_representation.code_node import CodeNode
 from source.preprocessing.data_preprocessing.data_representation.data_graph_representation.code_graph import CodeGraph
 from source.preprocessing.data_preprocessing.data_representation.data_node_representation.code_node_representator import CodeNodeRepresentator
@@ -12,11 +14,15 @@ from source.preprocessing.data_preprocessing.data_representation.data_graph_repr
 
 class DataPreprocessingPipeline(PreprocessingPipeline[str, list[Data]]):
     def __init__(self, vocab: dict[str, int]):
+        self.fetcher = DataFetcher()
         self.loader = DataLoader()
         self.graph_representator = CodeGraphRepresentator()
         self.node_representator = CodeNodeRepresentator(vocab)
 
     def run(self, input: str) -> list[Data]:
+        if not os.path.exists(input):
+            self.fetcher.fetch(os.path.dirname(input) or ".")
+
         graphs: list[Data] = []
         for rec in tqdm(self.loader.load(input), desc="preprocess"):
             code_graph = self.graph_representator.represent(rec["func"])
