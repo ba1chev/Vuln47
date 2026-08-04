@@ -4,6 +4,8 @@ from tqdm import tqdm
 from torch_geometric.loader import DataLoader
 
 from source.training.trainer import Trainer
+from source.training.model_training.loss.focal_loss import FocalLoss
+from source.training.model_training.training_config import LOSS_TYPE, FOCAL_GAMMA
 
 
 class ModelTrainer(Trainer[DataLoader, float]):
@@ -11,7 +13,11 @@ class ModelTrainer(Trainer[DataLoader, float]):
         self.model = model
         self.optimizer = optimizer
         self.device = device
-        self.criterion = nn.CrossEntropyLoss(weight=class_weight.to(device))
+        weight = class_weight.to(device)
+        if LOSS_TYPE == "focal":
+            self.criterion = FocalLoss(alpha=weight, gamma=FOCAL_GAMMA).to(device)
+        else:
+            self.criterion = nn.CrossEntropyLoss(weight=weight)
 
     def train(self, input: DataLoader) -> float:
         self.model.train()
