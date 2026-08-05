@@ -17,6 +17,10 @@ TEST_PATH = os.path.join(DATA_DIR, "test.pt")
 # where the best checkpoint is written
 CHECKPOINT_PATH = os.path.join("data", "model", "vuln_gnn.pt")
 
+# rolling checkpoint for resume-from-interrupt: full training state, overwritten
+# after every epoch and deleted on a clean finish (see ModelTrainingPipeline)
+RESUME_PATH = os.path.join("data", "model", "last.pt")
+
 # reproducibility
 SEED = 42
 
