@@ -8,6 +8,7 @@ from source.preprocessing.data_preprocessing.data_loading.data_loader import Dat
 from source.preprocessing.data_preprocessing.data_fetching.data_fetcher import DataFetcher
 from source.preprocessing.data_preprocessing.data_representation.data_node_representation.code_node import CodeNode
 from source.preprocessing.data_preprocessing.data_representation.data_graph_representation.code_graph import CodeGraph
+from source.preprocessing.data_preprocessing.data_representation.data_graph_representation.code_graph_config import NUM_BASE_EDGE_TYPES
 from source.preprocessing.data_preprocessing.data_representation.data_node_representation.code_node_representator import CodeNodeRepresentator
 from source.preprocessing.data_preprocessing.data_representation.data_graph_representation.code_graph_representator import CodeGraphRepresentator
 
@@ -44,12 +45,16 @@ class DataPreprocessingPipeline(PreprocessingPipeline[str, list[Data]]):
         if graph.edges:
             src = [e[0] for e in graph.edges]
             dst = [e[1] for e in graph.edges]
+            rev_types = [t + NUM_BASE_EDGE_TYPES for t in graph.edge_types]
             edge_index = torch.tensor([src + dst, dst + src], dtype=torch.long)
+            edge_attr = torch.tensor(graph.edge_types + rev_types, dtype=torch.long)
         else:
             edge_index = torch.empty((2, 0), dtype=torch.long)
+            edge_attr = torch.empty((0,), dtype=torch.long)
 
         return Data(
             x=x,
             edge_index=edge_index,
-            y=torch.tensor([label], dtype=torch.long),
+            edge_attr=edge_attr,
+            y=torch.tensor([label], dtype=torch.long)
         )
