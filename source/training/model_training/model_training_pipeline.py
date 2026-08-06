@@ -51,7 +51,7 @@ class ModelTrainingPipeline(TrainingPipeline[None, dict]):
             optimizer.load_state_dict(ckpt["optimizer"])
             scheduler.load_state_dict(ckpt["scheduler"])
             early_stopper.load_state_dict(ckpt["early_stopper"])
-            torch.set_rng_state(ckpt["rng_state"])
+            torch.set_rng_state(ckpt["rng_state"].cpu().to(torch.uint8))
             best = ckpt["best"]
             best_state = ckpt["best_state"]
             best_metrics, best_epoch = ckpt["best_metrics"], ckpt["best_epoch"]
