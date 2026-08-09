@@ -6,7 +6,7 @@ from source.preprocessing.data_preprocessing.data_loading.data_loader import Dat
 from source.preprocessing.data_preprocessing.data_representation.data_node_representation.code_node import CodeNode
 from source.preprocessing.data_preprocessing.data_representation.data_graph_representation.code_graph_representator import CodeGraphRepresentator
 from source.preprocessing.data_preprocessing.data_representation.data_node_representation.code_node_config import (
-    VOCAB_PATH, DANGEROUS_FUNCS, NUM_TOKEN_FEATURES
+    VOCAB_PATH, DANGEROUS_FUNCS, NUM_TOKEN_FEATURES, NUM_TOKEN_BUCKETS, token_bucket
 )
 
 
@@ -17,7 +17,8 @@ class CodeNodeRepresentator(DomainRepresentator[CodeNode, list[float]]):
 
     def represent(self, input: CodeNode) -> list[float]:
         type_id = self.vocab.get(input.node_type, self.unk)
-        return [float(type_id)] + self._token_features(input.token)
+        bucket = token_bucket(input.token)
+        return [float(type_id), float(bucket)] + self._token_features(input.token)
 
     def _token_features(self, token: str) -> list[float]:
         if not token:
@@ -62,10 +63,13 @@ class CodeNodeRepresentator(DomainRepresentator[CodeNode, list[float]]):
         return vocab
 
     @staticmethod
-    def feature_dims(vocab: dict[str, int], type_emb_dim: int = 64) -> dict:
+    def feature_dims(vocab: dict[str, int], type_emb_dim: int = 64,
+        token_emb_dim: int = 32) -> dict:
         return {
             "num_types": len(vocab),
             "type_emb_dim": type_emb_dim,
+            "num_token_buckets": NUM_TOKEN_BUCKETS,
+            "token_emb_dim": token_emb_dim,
             "num_token_features": NUM_TOKEN_FEATURES,
-            "node_feature_dim": type_emb_dim + NUM_TOKEN_FEATURES
+            "node_feature_dim": type_emb_dim + token_emb_dim + NUM_TOKEN_FEATURES
         }

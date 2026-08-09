@@ -1,4 +1,7 @@
 .venv
-data/
 __pycache__/
 *.pyc
+data/*
+!data/model/
+data/model/*
+!data/model/vuln_gnn.pt

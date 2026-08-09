@@ -19,3 +19,13 @@ class EarlyStopper:
 
     def should_stop(self) -> bool:
         return self.epochs_without_improvement >= self.patience
+
+    def state_dict(self) -> dict:
+        return {
+            "best": self.best,
+            "epochs_without_improvement": self.epochs_without_improvement
+        }
+
+    def load_state_dict(self, state: dict) -> None:
+        self.best = state["best"]
+        self.epochs_without_improvement = state["epochs_without_improvement"]
