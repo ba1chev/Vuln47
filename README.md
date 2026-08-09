@@ -1,15 +1,15 @@
 # Vuln47
 
 Detecting vulnerabilities in C/C++ functions with a Graph Neural Network.
-Each function is parsed into an AST graph and classified as vulnerable (`1`) or safe (`0`) by a GIN model.
+Each function is parsed into an AST graph and classified as vulnerable (`1`) or safe (`0`) by an edge-aware GIN (GINE) model.
 
 ## Overview
 
 Vuln47 treats vulnerability detection as **graph classification**. A raw C/C++ function is parsed
-into an Abstract Syntax Tree, the tree is turned into a feature graph, and a Graph Isomorphism
-Network (GIN) predicts whether the function is vulnerable. The whole path — from downloading the
-dataset to a trained checkpoint and its evaluation — is split into small, reusable components under
-`source/`, and walked through end to end in the notebooks under `notebooks/`.
+into an Abstract Syntax Tree, the tree is turned into a typed feature graph, and an edge-aware Graph
+Isomorphism Network (GINE) predicts whether the function is vulnerable. The whole path — from
+downloading the dataset to a trained checkpoint and its evaluation — is split into small, reusable
+components under `source/`, and walked through end to end in the notebooks under `notebooks/`.
 
 ## Data
 
@@ -45,35 +45,45 @@ demonstrated explicitly in Notebook 01.
 
 ```
 C code (str)
-  → CodeGraphRepresentator   (tree-sitter parse → CodeGraph / AST)
-  → CodeNodeRepresentator    (node type + token → 6-D feature vector)
-  → DataPreprocessingPipeline (assemble → PyG Data with bidirectional edges)
+  → CodeGraphRepresentator   (tree-sitter parse → CodeGraph / AST with typed edges)
+  → CodeNodeRepresentator    (node type + token → 7-D feature vector)
+  → DataPreprocessingPipeline (assemble → PyG Data with typed bidirectional edges)
   → list[Data]               (saved to data/processed/*.pt)
 ```
 
-Each node becomes `[type_id] ‖ [5 token features]` — the `type_id` indexes a learned embedding
-(vocabulary in `node_type_vocab.json`), and the five hand-crafted features encode C-vulnerability
-intuition (dangerous-call flag, size/length/index hints, numeric literal, token length, leaf
-indicator). Very large functions are capped (`MAX_CODE_BYTES = 30_000`, `MAX_NODES = 2_000` in
-`code_graph_config.py`), which discards <1% of the data.
+Each node becomes `[type_id] ‖ [token_bucket] ‖ [5 token features]` — the `type_id` indexes a learned
+embedding (vocabulary in `node_type_vocab.json`), the `token_bucket` is a crc32-hashed index into a
+learned token embedding (so the model can learn token semantics without an external tokenizer,
+`NUM_TOKEN_BUCKETS = 4096`), and the five hand-crafted features encode C-vulnerability intuition
+(leaf flag, dangerous-call flag, token length, numeric literal, size/length/index-like name). The AST
+is enriched with three edge types (`AST_CHILD`, `NEXT_SIBLING`, `USE_DEF`), each made bidirectional
+for a total of `NUM_EDGE_TYPES = 6`. Very large functions are capped (`MAX_CODE_BYTES = 30_000`,
+`MAX_NODES = 2_000` in `code_graph_config.py`), which discards <1% of the data.
 
 ## Model
 
-`Vuln47GNN` (`source/vuln47_gnn_model.py`) is a **GIN** classifier:
+`Vuln47GNN` (`source/vuln47_gnn_model.py`) is an edge-aware **GIN (GINE)** classifier:
 
-- an embedding for the AST node type, concatenated with the token features and projected to a hidden dimension;
-- `num_layers` (default 4) `GINConv` layers with batch-norm, ReLU, dropout, and residual connections;
-- a graph readout that concatenates **mean** and **max** pooling, followed by a 2-class head.
+- a learned embedding for the AST node type, concatenated with a learned token-bucket embedding and
+  the token features, projected to a hidden dimension;
+- `num_layers` (default 4) `GINEConv` layers — each consuming a learned **edge-type embedding** — with
+  batch-norm, ReLU, dropout, and residual connections;
+- a **JumpingKnowledge** (concat) readout over all layers, then a graph readout that concatenates
+  **mean** and **max** pooling, followed by a 2-class head.
 
 Training defaults (`training_config.py`): Adam (`lr=1e-3`, `weight_decay=1e-5`), `batch_size=64`,
-`epochs=30`, best checkpoint selected on **PR-AUC**, device auto-selects Apple **MPS** then CPU.
+`epochs=30`, **focal loss** (`gamma=2.0`) on top of a ~35× class weight for the rare vulnerable
+class, `ReduceLROnPlateau` scheduler and early stopping (patience 5), best checkpoint selected on
+**PR-AUC**, and a best-F1 **decision threshold** calibrated on the valid split and stored in the
+checkpoint. Training is resumable (a rolling `last.pt` is written each epoch). Device auto-selects
+CUDA, then Apple **MPS**, then CPU.
 
 ## Layout
 
 - `source/preprocessing/` — fetch → load → AST graph → node features → PyG `Data`
   - abstract bases: `Fetcher`, `Loader`, `DomainRepresentator`, `Explorer`, `PreprocessingPipeline`
   - concrete PrimeVul/graph implementations under `data_preprocessing/`
-- `source/training/` — batch → train GIN → evaluate (F1 / precision / recall / PR-AUC)
+- `source/training/` — batch → train GINE → evaluate (F1 / precision / recall / PR-AUC)
   - abstract bases: `Trainer`, `TrainingPipeline`; concrete under `model_training/`
 - `source/vuln47_gnn_model.py` — the `Vuln47GNN` model and `build_model` factory
 - `notebooks/` — `00` theory · `01` EDA · `02` preprocessing · `03` training · `04` evaluation · `05` conclusion
