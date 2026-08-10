@@ -17,7 +17,8 @@ The project uses the **PrimeVul** dataset (Ding et al., 2024): ~236k real C/C++ 
 labelled from CVEs, split into `train` / `valid` / `test` JSONL files. The data lives under
 `data/` and is **not** tracked by git (see `.gitignore`).
 
-The dataset is severely **imbalanced** — only ~2–3% of functions are vulnerable — which drives
+The dataset is severely **imbalanced** — only ~2.7–3.0% of functions are vulnerable (a ~1:32
+safe-to-vulnerable ratio on the training split) — which drives
 every downstream choice: a class-weighted loss during training and F1 / precision / recall / PR-AUC
 (never raw accuracy) during evaluation.
 
@@ -72,7 +73,7 @@ for a total of `NUM_EDGE_TYPES = 6`. Very large functions are capped (`MAX_CODE_
   **mean** and **max** pooling, followed by a 2-class head.
 
 Training defaults (`training_config.py`): Adam (`lr=1e-3`, `weight_decay=1e-5`), `batch_size=64`,
-`epochs=30`, **focal loss** (`gamma=2.0`) on top of a ~35× class weight for the rare vulnerable
+`epochs=30`, **focal loss** (`gamma=2.0`) on top of a ~32× class weight for the rare vulnerable
 class, `ReduceLROnPlateau` scheduler and early stopping (patience 5), best checkpoint selected on
 **PR-AUC**, and a best-F1 **decision threshold** calibrated on the valid split and stored in the
 checkpoint. Training is resumable (a rolling `last.pt` is written each epoch). Device auto-selects
